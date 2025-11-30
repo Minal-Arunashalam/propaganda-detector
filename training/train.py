@@ -25,6 +25,24 @@ def train_epoch(model, loader, optimizer, device):
         total_loss += loss.item()
     return total_loss / len(loader)
 
+def eval_epoch(model, loader, device):
+    model.eval()               #eval mode
+    total_loss = 0
+
+    with torch.no_grad():#no gradients for validation
+        for batch in loader:
+            input_ids = batch["input_ids"].to(device)
+            attention_mask = batch["attention_mask"].to(device)
+            labels = batch["labels"].to(device)
+
+            loss, logits = model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                labels=labels
+            )
+            total_loss += loss.item()
+
+    return total_loss / len(loader)
 
 def main():
     cfg = Config()
@@ -41,10 +59,13 @@ def main():
     optimizer = torch.optim.AdamW(model.parameters(), lr=cfg.lr)
 
     for epoch in range(cfg.epochs):
-        loss = train_epoch(model, train_loader, optimizer, cfg.device)
-        print(f"Epoch {epoch+1}/{cfg.epochs} | Loss: {loss:.4f}")
+        train_loss = train_epoch(model, train_loader, optimizer, cfg.device)
+        val_loss = eval_epoch(model, val_loader, cfg.device)
 
-        # TODO: add val later
+        print(
+            f"Epoch {epoch+1}/{cfg.epochs} | "
+            f"Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}"
+        )
 
         torch.save(model.state_dict(), f"checkpoint_epoch{epoch+1}.pt")
 
