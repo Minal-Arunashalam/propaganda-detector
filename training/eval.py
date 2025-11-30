@@ -59,7 +59,7 @@ def eval_checkpoint(checkpoint_path):
     recall_macro = recall_score(all_labels, all_preds, average="macro", zero_division=0)
     f1_macro = f1_score(all_labels, all_preds, average="macro", zero_division=0)
 
-    print("Micro (overall)")
+    print("\nMicro (overall)")
     print("Precision_micro: ", precision_micro)
     print("Recall_micro: ", recall_micro)
     print("F1_micro: ", f1_micro)
