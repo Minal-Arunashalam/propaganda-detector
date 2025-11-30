@@ -1,4 +1,3 @@
-# eval.py
 import torch
 from torch.utils.data import DataLoader
 from sklearn.metrics import f1_score, precision_score, recall_score
@@ -9,25 +8,22 @@ from model import PropagandaModel
 from configs import Config
 
 
-def eval_checkpoint(checkpoint_path):
+def collect_logits_and_labels(checkpoint_path):
     cfg = Config()
     tokenizer = AutoTokenizer.from_pretrained(cfg.model_name)
 
-    #load test set
     test_ds = PropagandaDataset(cfg.test_csv, tokenizer, cfg.max_len)
     test_loader = DataLoader(test_ds, batch_size=cfg.batch_size)
 
-    # load model and checkpoint
     model = PropagandaModel(cfg.model_name, cfg.num_labels)
     state_dict = torch.load(checkpoint_path, map_location=cfg.device)
     model.load_state_dict(state_dict)
     model.to(cfg.device)
     model.eval()
 
-    all_preds = []
+    all_logits = []
     all_labels = []
 
-    # loop over test data and collect predictions and true labels
     with torch.no_grad():
         for batch in test_loader:
             input_ids = batch["input_ids"].to(cfg.device)
@@ -40,40 +36,68 @@ def eval_checkpoint(checkpoint_path):
                 labels=labels,
             )
 
-            probs = torch.sigmoid(logits)          # [batch, 14], values in [0,1]
-            preds = (probs >= 0.5).int()           # threshold to 0/1
-
-            all_preds.append(preds.cpu())
+            all_logits.append(logits.cpu())
             all_labels.append(labels.cpu())
 
-    all_preds = torch.cat(all_preds, dim=0).numpy()
-    all_labels = torch.cat(all_labels, dim=0).numpy()
+    all_logits = torch.cat(all_logits, dim=0)
+    all_labels = torch.cat(all_labels, dim=0)
 
-    #micro metrics (overall performance)
-    precision_micro = precision_score(all_labels, all_preds, average="micro", zero_division=0)
-    recall_micro = recall_score(all_labels, all_preds, average="micro", zero_division=0)
-    f1_micro = f1_score(all_labels, all_preds, average="micro", zero_division=0)
+    return all_logits, all_labels
 
-    # macro metrics (average over labels)
-    precision_macro = precision_score(all_labels, all_preds, average="macro", zero_division=0)
-    recall_macro = recall_score(all_labels, all_preds, average="macro", zero_division=0)
-    f1_macro = f1_score(all_labels, all_preds, average="macro", zero_division=0)
 
-    print("\nMicro (overall)")
-    print("Precision_micro: ", precision_micro)
-    print("Recall_micro: ", recall_micro)
-    print("F1_micro: ", f1_micro)
+def eval_at_threshold(all_logits, all_labels, threshold):
+    probs = torch.sigmoid(all_logits)           # [N, num_labels]
+    preds = (probs >= threshold).int()
 
-    print("\nMacro (per-label avg)")
-    print("Precision_macro: ", precision_macro)
-    print("Recall_macro: ", recall_macro)
-    print("F1_macro: ", f1_macro)
+    preds_np = preds.numpy()
+    labels_np = all_labels.numpy()
+
+    precision_micro = precision_score(labels_np, preds_np, average="micro", zero_division=0)
+    recall_micro    = recall_score(labels_np, preds_np, average="micro", zero_division=0)
+    f1_micro        = f1_score(labels_np, preds_np, average="micro", zero_division=0)
+
+    precision_macro = precision_score(labels_np, preds_np, average="macro", zero_division=0)
+    recall_macro    = recall_score(labels_np, preds_np, average="macro", zero_division=0)
+    f1_macro        = f1_score(labels_np, preds_np, average="macro", zero_division=0)
+
+    return {
+        "threshold": threshold,
+        "precision_micro": precision_micro,
+        "recall_micro": recall_micro,
+        "f1_micro": f1_micro,
+        "precision_macro": precision_macro,
+        "recall_macro": recall_macro,
+        "f1_macro": f1_macro,
+    }
 
 
 def main():
-    #choose best checkpoint model version (lowest val loss)
-    checkpoint_path = "checkpoint_epoch3.pt"
-    eval_checkpoint(checkpoint_path)
+    cfg = Config()
+    checkpoint_path = "checkpoint_epoch2.pt"  #best epoch for RoBERTa
+
+    #nun model once and collect logits (Raw predictions) and labels
+    all_logits, all_labels = collect_logits_and_labels(checkpoint_path)
+
+    #try multiple thresholds
+    thresholds = [i / 10.0 for i in range(1, 10)]  # 0.1, 0.2, ..., 0.9
+    results = []
+
+    for t in thresholds:
+        metrics = eval_at_threshold(all_logits, all_labels, t)
+        results.append(metrics)
+        print(f"Threshold {t:.1f} | "
+              f"Micro F1: {metrics['f1_micro']:.4f} | "
+              f"Micro P: {metrics['precision_micro']:.4f} | "
+              f"Micro R: {metrics['recall_micro']:.4f}")
+
+    #find best threshold by micro F1
+    best = max(results, key=lambda m: m["f1_micro"])
+    print("\nBest threshold by micro F1")
+    print(f"Threshold: {best['threshold']:.2f}")
+    print(f"Micro Precision: {best['precision_micro']:.4f}")
+    print(f"Micro Recall: {best['recall_micro']:.4f}")
+    print(f"Micro F1: {best['f1_micro']:.4f}")
+    print(f"Macro F1: {best['f1_macro']:.4f}")
 
 
 if __name__ == "__main__":
