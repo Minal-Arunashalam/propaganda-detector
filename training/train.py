@@ -46,6 +46,7 @@ def eval_epoch(model, loader, device):
 
 def main():
     cfg = Config()
+    safe_name = cfg.model_name.replace("/", "_")
 
     tokenizer = AutoTokenizer.from_pretrained(cfg.model_name)
 
@@ -67,7 +68,7 @@ def main():
             f"Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}"
         )
 
-        torch.save(model.state_dict(), f"checkpoint_epoch{epoch+1}.pt")
+        torch.save(model.state_dict(), f"{safe_name}_checkpoint_epoch{epoch+1}.pt")
 
 if __name__ == "__main__":
     main()

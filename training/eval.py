@@ -73,7 +73,8 @@ def eval_at_threshold(all_logits, all_labels, threshold):
 
 def main():
     cfg = Config()
-    checkpoint_path = "checkpoint_epoch2.pt"  #best epoch for RoBERTa
+    safe_name = cfg.model_name.replace("/", "_")
+    checkpoint_path = f"{safe_name}_checkpoint_epoch2.pt"  #best epoch for RoBERTa
 
     #nun model once and collect logits (Raw predictions) and labels
     all_logits, all_labels = collect_logits_and_labels(checkpoint_path)
