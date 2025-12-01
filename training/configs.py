@@ -36,8 +36,8 @@ class LlamaConfig:
     val_csv = "data/processed/val.csv"
     test_csv = "data/processed/test.csv"
 
-    max_len = 256
-    batch_size = 4  # Smaller batch size for larger model (use 2 for full fine-tuning without LoRA)
+    max_len = 128
+    batch_size = 1  # Smaller batch size for larger model (use 2 for full fine-tuning without LoRA)
     lr = 2e-4  # For LoRA; automatically adjusted to 2e-5 for full fine-tuning if use_lora=False
     epochs = 5
     device = "cuda"  # Will auto-detect in Colab (works with CPU, CUDA, or MPS)
@@ -49,3 +49,9 @@ class LlamaConfig:
     lora_alpha = 16
     lora_dropout = 0.05
     target_modules = ["q_proj", "v_proj", "k_proj", "o_proj"]  # For Llama architecture
+
+    # 4-bit quantization (QLoRA) settings
+    load_in_4bit = True
+    bnb_4bit_compute_dtype = "bfloat16"
+    bnb_4bit_quant_type = "nf4"
+    bnb_4bit_use_double_quant = True
