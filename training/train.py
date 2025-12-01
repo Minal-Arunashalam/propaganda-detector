@@ -2,7 +2,7 @@
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, AutoModel, AutoConfig, BitsAndBytesConfig
 import json
 import csv
 import os
@@ -200,7 +200,6 @@ def train_deberta():
 
 def train_llama():
     from peft import LoraConfig, get_peft_model, TaskType
-    from transformers import AutoModel, AutoConfig
 
     cfg = LlamaConfig()
     safe_name = cfg.model_name.replace("/", "_")
@@ -248,8 +247,21 @@ def train_llama():
     # Create base model and apply LoRA to encoder
     if cfg.use_lora:
         print(f"Training Llama with LoRA: {cfg.model_name}")
-        # Load the base encoder
-        base_model = AutoModel.from_pretrained(cfg.model_name)
+        # Load the base encoder (optionally in 4-bit for QLoRA)
+        if getattr(cfg, "load_in_4bit", False):
+            bnb_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_use_double_quant=getattr(cfg, "bnb_4bit_use_double_quant", True),
+                bnb_4bit_quant_type=getattr(cfg, "bnb_4bit_quant_type", "nf4"),
+                bnb_4bit_compute_dtype=torch.bfloat16,
+            )
+            base_model = AutoModel.from_pretrained(
+                cfg.model_name,
+                quantization_config=bnb_config,
+                device_map="auto",
+            )
+        else:
+            base_model = AutoModel.from_pretrained(cfg.model_name).to(device)
 
         # Apply LoRA to the encoder
         peft_config = LoraConfig(
@@ -266,7 +278,10 @@ def train_llama():
         config = AutoConfig.from_pretrained(cfg.model_name)
         model = PropagandaModelWithLoRA(
             lora_model, config.hidden_size, cfg.num_labels
-        ).to(device)
+        )
+        # For non-quantized models, move everything to the chosen device
+        if not getattr(cfg, "load_in_4bit", False):
+            model = model.to(device)
 
         # Only optimize trainable parameters (LoRA parameters + classifier)
         trainable_params = [p for p in model.parameters() if p.requires_grad]
