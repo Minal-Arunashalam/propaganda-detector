@@ -211,7 +211,7 @@ def train_llama():
     # Warn about full fine-tuning resource requirements
     if not cfg.use_lora:
         print("\n" + "=" * 70)
-        print("WARNING: Full fine-tuning of Llama-2-7b is VERY resource intensive!")
+        print("WARNING: Full fine-tuning of Llama-3.1-8B is VERY resource intensive!")
         print("This requires:")
         print("  - ~28GB+ GPU memory (even with batch_size=2)")
         print("  - Multiple hours per epoch on most hardware")
