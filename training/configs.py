@@ -29,7 +29,7 @@ class DebertaConfig:
 
 
 class LlamaConfig:
-    model_name = "meta-llama/Llama-3.1-8b-hf"  # Latest free Llama model
+    model_name = "meta-llama/Meta-Llama-3.1-8B-Instruct"
     num_labels = 14
 
     train_csv = "data/processed/train.csv"
