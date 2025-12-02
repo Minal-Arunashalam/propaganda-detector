@@ -389,27 +389,18 @@ def main():
     import sys
 
     if len(sys.argv) < 2:
-        print("Please specify a model type:")
-        print("  python eval.py roberta [epoch]")
-        print("  python eval.py deberta [epoch]")
-        print("  python eval.py llama [epoch] [--no-lora]")
-        print("\nExample:")
-        print("  python eval.py roberta 2")
-        print("  python eval.py llama 3")
-        print("  python eval.py llama 2 --no-lora  # For full fine-tuning")
+        print("Specify model type: roberta, deberta, or llama")
         return
 
     model_type = sys.argv[1].lower()
     epoch = None
     use_lora = True
 
-    # Parse epoch if provided
     if len(sys.argv) > 2 and sys.argv[2].isdigit():
         epoch = int(sys.argv[2])
     elif len(sys.argv) > 2 and sys.argv[2] != "--no-lora":
         print(f"Warning: '{sys.argv[2]}' is not a valid epoch number, using default")
 
-    # Check for --no-lora flag
     if "--no-lora" in sys.argv:
         use_lora = False
 
@@ -421,7 +412,6 @@ def main():
         eval_llama(epoch=epoch, use_lora=use_lora)
     else:
         print(f"Unknown model type: {model_type}")
-        print("Usage: python eval.py [roberta|deberta|llama] [epoch] [--no-lora]")
 
 
 if __name__ == "__main__":

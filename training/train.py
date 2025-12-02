@@ -208,26 +208,12 @@ def train_llama():
 
     print(f"Using device: {device}")
 
-    # Warn about full fine-tuning resource requirements
     if not cfg.use_lora:
-        print("\n" + "=" * 70)
-        print("WARNING: Full fine-tuning of Llama-3.1-8B is VERY resource intensive!")
-        print("This requires:")
-        print("  - ~28GB+ GPU memory (even with batch_size=2)")
-        print("  - Multiple hours per epoch on most hardware")
-        print("  - May not work on Colab free tier (T4 GPU has ~15GB)")
-        print("\nRecommendation: Use LoRA fine-tuning (set use_lora=True in config)")
-        print("=" * 70 + "\n")
-
-        # Adjust learning rate for full fine-tuning
-        if cfg.lr == 2e-4:  # If still using LoRA LR, adjust it
+        if cfg.lr == 2e-4:
             cfg.lr = 2e-5
-            print(f"Adjusted learning rate to {cfg.lr} for full fine-tuning")
 
-        # Further reduce batch size if needed
         if cfg.batch_size > 2:
             cfg.batch_size = 2
-            print(f"Reduced batch size to {cfg.batch_size} for full fine-tuning")
 
     # Llama tokenizer requires padding token
     tokenizer = AutoTokenizer.from_pretrained(cfg.model_name)
@@ -362,12 +348,8 @@ def main():
             train_llama()
         else:
             print(f"Unknown model type: {model_type}")
-            print("Usage: python train.py [roberta|deberta|llama]")
     else:
-        print("Please specify a model type:")
-        print("  python train.py roberta")
-        print("  python train.py deberta")
-        print("  python train.py llama")
+        print("Specify model type: roberta, deberta, or llama")
 
 
 if __name__ == "__main__":
