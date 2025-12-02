@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from sklearn.metrics import f1_score, precision_score, recall_score
-from transformers import AutoTokenizer, AutoModel, AutoConfig
+from transformers import AutoTokenizer, AutoModel, AutoConfig, BitsAndBytesConfig
 import os
 
 from dataset import PropagandaDataset
@@ -194,8 +194,20 @@ def collect_logits_and_labels_llama(checkpoint_path, epoch=None, use_lora=True):
         print(f"  LoRA adapter: {lora_checkpoint_dir}")
         print(f"  Classifier: {classifier_path}")
 
-        # Load base model and LoRA adapters
-        base_model = AutoModel.from_pretrained(cfg.model_name)
+        # Load base model in 4-bit (same as training, QLoRA-style)
+        bnb_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_compute_dtype=torch.bfloat16,
+            bnb_4bit_use_double_quant=True,
+            bnb_4bit_quant_type="nf4",
+        )
+
+        base_model = AutoModel.from_pretrained(
+            cfg.model_name,
+            quantization_config=bnb_config,
+            device_map="auto",
+        )
+
         lora_model = PeftModel.from_pretrained(base_model, lora_checkpoint_dir)
 
         # Create full model

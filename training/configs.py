@@ -29,7 +29,7 @@ class DebertaConfig:
 
 
 class LlamaConfig:
-    model_name = "meta-llama/Llama-3.1-8b-hf"  # Latest free Llama model
+    model_name = "meta-llama/Meta-Llama-3.1-8B-Instruct"
     num_labels = 14
 
     train_csv = "data/processed/train.csv"
@@ -47,4 +47,10 @@ class LlamaConfig:
     lora_r = 8
     lora_alpha = 16
     lora_dropout = 0.05
-    target_modules = ["q_proj", "v_proj", "k_proj", "o_proj"]  # For Llama architecture
+    target_modules = ["q_proj", "v_proj", "k_proj", "o_proj"]
+
+    # 4-bit quantization (QLoRA) settings
+    load_in_4bit = True
+    bnb_4bit_compute_dtype = "bfloat16"
+    bnb_4bit_quant_type = "nf4"
+    bnb_4bit_use_double_quant = True
