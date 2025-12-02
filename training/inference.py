@@ -140,31 +140,15 @@ def load_llama_model(epoch=2, use_lora=True):
 
 
 def get_label_names(csv_path=None):
-    """Get the list of propaganda technique labels"""
-    # Try to infer from dataset if CSV path provided
-    if csv_path and os.path.exists(csv_path):
-        try:
-            df = pd.read_csv(csv_path)
-            # Get all unique labels by checking all rows
-            all_labels_set = set()
-            for idx in range(min(100, len(df))):  # Check first 100 rows
-                labels = json.loads(df.loc[idx, "labels"])
-                # Find which indices are 1
-                for i, val in enumerate(labels):
-                    if val == 1:
-                        all_labels_set.add(i)
-            
-            # If we found labels, we know the count
-            if all_labels_set:
-                num_labels = max(all_labels_set) + 1
-                # Return placeholder names if we can't determine actual names
-                return [f"Technique_{i}" for i in range(num_labels)]
-        except:
-            pass
-    
-    # Default label names (14 techniques as per SemEval 2020 Task 11)
-    # These should match the order used during training
-    label_names = [
+    """Get the list of propaganda technique labels.
+
+    We first try to infer how many labels there are from the CSV by looking at
+    the length of the 'labels' vector in the first row. If it matches the
+    known SemEval 2020 Task 11 setup (14 labels), we return the canonical
+    names. Otherwise, we fall back to generic Technique_i names.
+    """
+    # Canonical SemEval 2020 Task 11 label names (14 techniques)
+    default_label_names = [
         "Loaded Language",
         "Name Calling,Labeling",
         "Repetition",
@@ -178,9 +162,34 @@ def get_label_names(csv_path=None):
         "Black-and-White Fallacy",
         "Thought-terminating Cliches",
         "Whataboutism,Straw_Men,Red_Herring",
-        "Bandwagon,Reductio ad Hitlerum"
+        "Bandwagon,Reductio ad Hitlerum",
     ]
-    return label_names
+
+    num_labels = None
+
+    if csv_path and os.path.exists(csv_path):
+        try:
+            # Read just the first row to determine label vector length
+            df = pd.read_csv(csv_path, nrows=1)
+            raw_labels = df.loc[0, "labels"]
+
+            # 'labels' is stored as a JSON string like "[0, 1, 0, ...]"
+            labels = json.loads(raw_labels)
+            num_labels = len(labels)
+        except Exception:
+            # If anything goes wrong, just fall back to default names
+            return default_label_names
+
+    # If we couldn't infer num_labels, assume the standard 14 labels
+    if num_labels is None:
+        return default_label_names
+
+    # If the dataset uses the standard 14 labels, return their names
+    if num_labels == len(default_label_names):
+        return default_label_names
+
+    # Otherwise, fall back to generic Technique_i names with the correct length
+    return [f"Technique_{i}" for i in range(num_labels)]
 
 
 def predict_example(model, tokenizer, text, device, max_len=256, threshold=0.5):
@@ -278,11 +287,12 @@ def show_example_results(model_type, example_idx, epoch=2, threshold=0.5, use_lo
     predicted_count = preds.sum()
     true_count = sum(true_labels)
     correct = (preds == true_labels).sum()
-    
+    total_labels = len(true_labels)
+
     print(f"\nSummary:")
     print(f"  Predicted techniques: {predicted_count}")
     print(f"  True techniques: {true_count}")
-    print(f"  Correct predictions: {correct}/{len(label_names)}")
+    print(f"  Correct predictions: {correct}/{total_labels}")
     print(f"  Threshold used: {threshold}")
     
     return {
@@ -319,4 +329,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
