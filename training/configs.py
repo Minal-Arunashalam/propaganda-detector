@@ -38,17 +38,16 @@ class LlamaConfig:
 
     max_len = 128
     batch_size = 1  # Smaller batch size for larger model (use 2 for full fine-tuning without LoRA)
-    lr = 1e-4  # For LoRA; automatically adjusted to 2e-5 for full fine-tuning if use_lora=False
+    lr = 2e-4  # For LoRA; automatically adjusted to 2e-5 for full fine-tuning if use_lora=False
     epochs = 2
     device = "cuda"  # Will auto-detect in Colab (works with CPU, CUDA, or MPS)
 
     # LoRA specific parameters
-    use_lora = True  # Set to False for full fine-tuning (WARNING: Requires ~28GB+ GPU memory, very slow!)
-    # Full fine-tuning may not work on Colab free tier (T4 has ~15GB) - use LoRA instead
+    use_lora = True
     lora_r = 8
     lora_alpha = 16
     lora_dropout = 0.05
-    target_modules = ["q_proj", "v_proj", "k_proj", "o_proj"]  # For Llama architecture
+    target_modules = ["q_proj", "v_proj", "k_proj", "o_proj"]
 
     # 4-bit quantization (QLoRA) settings
     load_in_4bit = True
