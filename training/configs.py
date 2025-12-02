@@ -36,9 +36,9 @@ class LlamaConfig:
     val_csv = "data/processed/val.csv"
     test_csv = "data/processed/test.csv"
 
-    max_len = 128
-    batch_size = 1  # Smaller batch size for larger model (use 2 for full fine-tuning without LoRA)
-    lr = 2e-4  # For LoRA; automatically adjusted to 2e-5 for full fine-tuning if use_lora=False
+    max_len = 256
+    batch_size = 2  # Slightly larger batch size; adjust down to 1 if we get OOM on smaller GPUs
+    lr = 1e-4  # More conservative LR for LoRA on Llama; will be scaled down for full finetuning if use_lora=False
     epochs = 2
     device = "cuda"  # Will auto-detect in Colab (works with CPU, CUDA, or MPS)
 

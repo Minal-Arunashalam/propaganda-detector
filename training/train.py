@@ -245,7 +245,8 @@ def train_llama():
     train_ds = PropagandaDataset(cfg.train_csv, tokenizer, cfg.max_len)
     val_ds = PropagandaDataset(cfg.val_csv, tokenizer, cfg.max_len)
 
-    # Compute class-wise pos_weight for BCEWithLogitsLoss to handle class imbalance
+    # Compute class-wise pos_weight for BCEWithLogitsLoss to handle class imbalance,
+    # but clamp it so we don't blow up to extreme values (which can cause "predict all 1s").
     all_labels = []
     for i in range(len(train_ds)):
         labels_i = train_ds[i]["labels"]
@@ -254,10 +255,23 @@ def train_llama():
             all_labels.append(labels_i.float())
         else:
             all_labels.append(torch.tensor(labels_i, dtype=torch.float32))
+
     all_labels_tensor = torch.stack(all_labels, dim=0)  # [N, num_labels]
     pos_counts = all_labels_tensor.sum(dim=0)
     neg_counts = all_labels_tensor.shape[0] - pos_counts
-    pos_weight = neg_counts / (pos_counts + 1e-6)
+
+    raw_pos_weight = neg_counts / (pos_counts + 1e-6)
+
+    # Clamp the weights to a reasonable range so they still help but don't dominate the loss
+    pos_weight = torch.clamp(raw_pos_weight, min=1.0, max=5.0)
+
+    # Optional: print simple stats so we can see what's going on
+    print(
+        f"pos_weight stats - min: {pos_weight.min().item():.2f}, "
+        f"max: {pos_weight.max().item():.2f}, "
+        f"mean: {pos_weight.mean().item():.2f}"
+    )
+
     # Move to the same device as the model will use
     pos_weight = pos_weight.to(device)
 
