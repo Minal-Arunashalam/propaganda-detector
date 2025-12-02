@@ -245,6 +245,22 @@ def train_llama():
     train_ds = PropagandaDataset(cfg.train_csv, tokenizer, cfg.max_len)
     val_ds = PropagandaDataset(cfg.val_csv, tokenizer, cfg.max_len)
 
+    # Compute class-wise pos_weight for BCEWithLogitsLoss to handle class imbalance
+    all_labels = []
+    for i in range(len(train_ds)):
+        labels_i = train_ds[i]["labels"]
+        # Ensure we always have a float32 tensor
+        if isinstance(labels_i, torch.Tensor):
+            all_labels.append(labels_i.float())
+        else:
+            all_labels.append(torch.tensor(labels_i, dtype=torch.float32))
+    all_labels_tensor = torch.stack(all_labels, dim=0)  # [N, num_labels]
+    pos_counts = all_labels_tensor.sum(dim=0)
+    neg_counts = all_labels_tensor.shape[0] - pos_counts
+    pos_weight = neg_counts / (pos_counts + 1e-6)
+    # Move to the same device as the model will use
+    pos_weight = pos_weight.to(device)
+
     train_loader = DataLoader(train_ds, batch_size=cfg.batch_size, shuffle=True)
     val_loader = DataLoader(val_ds, batch_size=cfg.batch_size)
 
