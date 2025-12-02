@@ -30,12 +30,26 @@ class PropagandaModelWithLoRA(nn.Module):
     def forward(self, input_ids, attention_mask, labels=None):
         outputs = self.encoder(input_ids=input_ids, attention_mask=attention_mask)
 
-        cls = outputs.last_hidden_state[:, 0, :]
+        # Get encoder output and ensure classifier is on the same device
+        hidden = outputs.last_hidden_state
+        device = hidden.device
+
+        # If classifier is not on this device yet, move it once
+        if self.classifier.weight.device != device:
+            self.classifier.to(device)
+
+        # CLS token representation
+        cls = hidden[:, 0, :]  # [batch, hidden_size]
+
+        # Make sure dtype matches classifier weights (fixes Half vs Float error)
+        if cls.dtype != self.classifier.weight.dtype:
+            cls = cls.to(self.classifier.weight.dtype)
+
         logits = self.classifier(cls)
 
         if labels is not None:
             loss_fct = nn.BCEWithLogitsLoss()
-            loss = loss_fct(logits, labels)
+            loss = loss_fct(logits, labels.to(device))
             return loss, logits
 
         return logits
@@ -366,16 +380,23 @@ def eval_llama(checkpoint_path=None, epoch=None, use_lora=True):
     all_logits, all_labels = collect_logits_and_labels_llama(
         checkpoint_path, epoch, use_lora
     )
+    import numpy as np
+
+    print("logits shape:", all_logits.shape)
+    print("logits min/max:", all_logits.min(), all_logits.max())
+    print("logits mean:", all_logits.mean())
 
     # Try multiple thresholds
-    thresholds = [i / 10.0 for i in range(1, 10)]  # 0.1, 0.2, ..., 0.9
+    # thresholds = [i / 10.0 for i in range(1, 10)]  # 0.1, 0.2, ..., 0.9
+    thresholds = [0.005, 0.01, 0.02, 0.03, 0.05,
+              0.07, 0.1, 0.15, 0.2, 0.3]
     results = []
 
     for t in thresholds:
         metrics = eval_at_threshold(all_logits, all_labels, t)
         results.append(metrics)
         print(
-            f"Threshold {t:.1f} | "
+            f"Threshold {t:.4f} | "
             f"Micro F1: {metrics['f1_micro']:.4f} | "
             f"Micro P: {metrics['precision_micro']:.4f} | "
             f"Micro R: {metrics['recall_micro']:.4f}"
@@ -434,7 +455,13 @@ def main():
     else:
         print(f"Unknown model type: {model_type}")
         print("Usage: python eval.py [roberta|deberta|llama] [epoch] [--no-lora]")
+    import pandas as pd
+    from configs import LlamaConfig
 
+    cfg = LlamaConfig()
+    df_val = pd.read_csv(cfg.val_csv)
+    print(df_val.head())
+    print(df_val.iloc[0])  # see one row: text + label columns
 
 if __name__ == "__main__":
     main()

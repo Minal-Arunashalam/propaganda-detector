@@ -38,8 +38,8 @@ class LlamaConfig:
 
     max_len = 128
     batch_size = 1  # Smaller batch size for larger model (use 2 for full fine-tuning without LoRA)
-    lr = 2e-4  # For LoRA; automatically adjusted to 2e-5 for full fine-tuning if use_lora=False
-    epochs = 5
+    lr = 1e-4  # For LoRA; automatically adjusted to 2e-5 for full fine-tuning if use_lora=False
+    epochs = 2
     device = "cuda"  # Will auto-detect in Colab (works with CPU, CUDA, or MPS)
 
     # LoRA specific parameters

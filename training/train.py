@@ -62,17 +62,25 @@ def log_results(safe_name, epoch, train_loss, val_loss, use_lora=False):
 def train_epoch(model, loader, optimizer, device):
     model.train()
     total_loss = 0
-    for batch in loader:
+    for i, batch in enumerate(loader):
         optimizer.zero_grad()
         input_ids = batch["input_ids"].to(device)
         attention_mask = batch["attention_mask"].to(device)
         labels = batch["labels"].to(device)
+
         loss, logits = model(
-            input_ids=input_ids, attention_mask=attention_mask, labels=labels
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            labels=labels,
         )
         loss.backward()
         optimizer.step()
         total_loss += loss.item()
+
+        #progress print every 10 steps
+        if (i + 1) % 10 == 0:
+            print(f"  Step {i+1}/{len(loader)} - loss: {loss.item():.4f}")
+
     return total_loss / len(loader)
 
 
@@ -109,6 +117,20 @@ def train_roberta():
 
     train_ds = PropagandaDataset(cfg.train_csv, tokenizer, cfg.max_len)
     val_ds = PropagandaDataset(cfg.val_csv, tokenizer, cfg.max_len)
+
+    # Compute class-wise pos_weight for BCEWithLogitsLoss to handle class imbalance
+    all_labels = []
+    for i in range(len(train_ds)):
+        labels_i = train_ds[i]["labels"]
+        # Ensure we always have a float32 tensor
+        if isinstance(labels_i, torch.Tensor):
+            all_labels.append(labels_i.float())
+        else:
+            all_labels.append(torch.tensor(labels_i, dtype=torch.float32))
+    all_labels_tensor = torch.stack(all_labels, dim=0)  # [N, num_labels]
+    pos_counts = all_labels_tensor.sum(dim=0)
+    neg_counts = all_labels_tensor.shape[0] - pos_counts
+    pos_weight = neg_counts / (pos_counts + 1e-6)
 
     train_loader = DataLoader(train_ds, batch_size=cfg.batch_size, shuffle=True)
     val_loader = DataLoader(val_ds, batch_size=cfg.batch_size)
@@ -276,8 +298,9 @@ def train_llama():
 
         # Now create the full model with LoRA-adapted encoder
         config = AutoConfig.from_pretrained(cfg.model_name)
+        # Pass class imbalance weights into the model so the loss can use them
         model = PropagandaModelWithLoRA(
-            lora_model, config.hidden_size, cfg.num_labels
+            lora_model, config.hidden_size, cfg.num_labels, pos_weight=pos_weight
         )
         # For non-quantized models, move everything to the chosen device
         if not getattr(cfg, "load_in_4bit", False):
@@ -345,19 +368,48 @@ def train_llama():
 
 # Helper class for Llama with LoRA
 class PropagandaModelWithLoRA(nn.Module):
-    def __init__(self, encoder, hidden_size, num_labels):
+    def __init__(self, encoder, hidden_size, num_labels, pos_weight=None):
         super().__init__()
         self.encoder = encoder
         self.classifier = nn.Linear(hidden_size, num_labels)
 
+        # Optional class-imbalance weights for BCEWithLogitsLoss
+        if pos_weight is not None:
+            # Register as buffer so it moves with the model between devices
+            self.register_buffer("pos_weight", pos_weight.float())
+        else:
+            self.pos_weight = None
+
     def forward(self, input_ids, attention_mask, labels=None):
         outputs = self.encoder(input_ids=input_ids, attention_mask=attention_mask)
 
-        cls = outputs.last_hidden_state[:, 0, :]
+        # Get encoder output and ensure classifier is on the same device
+        hidden = outputs.last_hidden_state
+        device = hidden.device
+
+        # If classifier is not on this device yet, move it once
+        if self.classifier.weight.device != device:
+            self.classifier.to(device)
+
+        # CLS token representation
+        cls = hidden[:, 0, :]  # [batch, hidden_size]
+
+        # Make sure dtype matches classifier weights (fixes Half vs Float error)
+        if cls.dtype != self.classifier.weight.dtype:
+            cls = cls.to(self.classifier.weight.dtype)
+
         logits = self.classifier(cls)
 
         if labels is not None:
-            loss_fct = nn.BCEWithLogitsLoss()
+            # Ensure labels and pos_weight live on the same device/dtype as logits
+            labels = labels.to(device).to(logits.dtype)
+
+            if getattr(self, "pos_weight", None) is not None:
+                pw = self.pos_weight.to(logits.device).to(logits.dtype)
+                loss_fct = nn.BCEWithLogitsLoss(pos_weight=pw)
+            else:
+                loss_fct = nn.BCEWithLogitsLoss()
+
             loss = loss_fct(logits, labels)
             return loss, logits
 
