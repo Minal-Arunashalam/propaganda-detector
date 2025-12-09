@@ -186,7 +186,8 @@ def train_roberta():
     train_ds = PropagandaDataset(cfg.train_csv, tokenizer, cfg.max_len)
     val_ds = PropagandaDataset(cfg.val_csv, tokenizer, cfg.max_len)
 
-    # Compute class-wise pos_weight for BCEWithLogitsLoss to handle class imbalance
+    # Compute class-wise pos_weight for BCEWithLogitsLoss to handle class imbalance.
+    # We clamp it to avoid extreme weights that make the model predict all 1s.
     all_labels = []
     for i in range(len(train_ds)):
         labels_i = train_ds[i]["labels"]
@@ -195,10 +196,20 @@ def train_roberta():
             all_labels.append(labels_i.float())
         else:
             all_labels.append(torch.tensor(labels_i, dtype=torch.float32))
+
     all_labels_tensor = torch.stack(all_labels, dim=0)  # [N, num_labels]
     pos_counts = all_labels_tensor.sum(dim=0)
     neg_counts = all_labels_tensor.shape[0] - pos_counts
-    pos_weight = neg_counts / (pos_counts + 1e-6)
+    raw_pos_weight = neg_counts / (pos_counts + 1e-6)
+
+    # Clamp to a reasonable range so the rare labels are up-weighted but not exploding
+    pos_weight = torch.clamp(raw_pos_weight, min=1.0, max=10.0)
+
+    print(
+        f"[RoBERTa] pos_weight stats - min: {pos_weight.min().item():.2f}, "
+        f"max: {pos_weight.max().item():.2f}, "
+        f"mean: {pos_weight.mean().item():.2f}"
+    )
 
     train_loader = DataLoader(train_ds, batch_size=cfg.batch_size, shuffle=True)
     val_loader = DataLoader(val_ds, batch_size=cfg.batch_size)
@@ -213,8 +224,12 @@ def train_roberta():
     print(f"Results will be saved to: {safe_name}_training_results.csv and .json")
 
     for epoch in range(cfg.epochs):
-        train_loss = train_epoch(model, train_loader, optimizer, device)
-        val_loss = eval_epoch(model, val_loader, device)
+        train_loss = train_epoch_with_posweight(
+            model, train_loader, optimizer, device, pos_weight
+        )
+        val_loss = eval_epoch_with_posweight(
+            model, val_loader, device, pos_weight
+        )
 
         print(
             f"Epoch {epoch+1}/{cfg.epochs} | "
