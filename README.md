@@ -11,6 +11,9 @@ The code is written in **PyTorch** and built on top of **Hugging Face Transforme
 
 ---
 
+## How to Run
+To run the experiments we set up, use the `finalProject_full.ipynb` notebook. The notebook pulls the files from this repo, installs the requirements, and then trains, evaluates, and inferences the models. We recommend loading the notebook in Google Colab if you don't have access to your own powerful GPU.
+
 ## Project Structure
 
 - `training/train.py` – main training script; trains RoBERTa, DeBERTa, or Llama models.
